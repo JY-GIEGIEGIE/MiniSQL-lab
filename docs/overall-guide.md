@@ -13,6 +13,24 @@
 
 ## 三、系统架构与模块概述
 ### 3.1 系统架构示意图
+架构总览：数据库管理系统 (DBMS) 架构
+
+1. 顶层：SQL Parser (SQL解析器)
+   ↓  (接收SQL查询，生成抽象语法树)
+2. 中层：Planner and Executor (查询计划器与执行器)
+   ↓  (将解析后的查询计划分发到底层存储引擎)
+3. 底层：DB Storage Engine Instance (数据库存储引擎实例) [存在2个独立的并行实例，如分区或副本]
+   ↓  实例内部结构 (从上到下)：
+       ├── 3.1 Catalog Manager (目录/元数据管理器)
+       ├── 3.2 Index Manager (索引管理器)
+       └── 3.3 Record Manager (记录管理器)
+           ↓  (三个管理器共同指向下面的缓冲池管理器)
+       3.4 Buffer Pool Manager (缓冲池管理器)
+           ↓  (管理内存页，调度读写)
+       3.5 Disk Manager (磁盘管理器)
+           ↓  (与物理文件交互)
+       3.6 Database File (数据库文件)
+       
 在系统架构中，解释器SQL Parser在解析SQL语句后将生成的语法树交由执行器Executor处理。执行器则根据语法树的内容对相应的数据库实例（DB Storage Engine Instance）进行操作。
 每个DB Storage Engine Instance对应了一个数据库实例（即通过CREATE DATABSAE创建的数据库）。在每个数据库实例中，用户可以定义若干表和索引，表和索引的信息通过Catalog Manager、Index Manager和Record Manager进行维护。目前系统架构中已经支持使用多个数据库实例，不同的数据库实例可以通过USE语句切换（即类似于MySQL的切换数据库），在初步实现时，可以先考虑单个数据库实例的场景，在单个实例跑通后再支持多个实例。
 
