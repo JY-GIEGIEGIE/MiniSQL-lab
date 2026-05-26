@@ -24,11 +24,11 @@ class BitmapPage {
    * @return true if successfully de-allocate a page.
    */
   bool DeAllocatePage(uint32_t page_offset);
-
   /**
    * @return whether a page in the extent is free
    */
   bool IsPageFree(uint32_t page_offset) const;
+
 
  private:
   /**

@@ -32,6 +32,7 @@ Bitmap Page由两部分组成，一部分是用于加速Bitmap内部查找的元
 为了应对上述问题，一个简单的解决思路是，把上面说的一个位图页加一段连续的数据页看成数据库文件中的一个分区（Extent），再通过一个额外的元信息页来记录这些分区的信息。通过这种“套娃”的方式，来使磁盘文件能够维护更多的数据页信息。其主要结构如下图所示：
 
 <img src="https://cdn.nlark.com/yuque/0/2022/png/25540491/1648370611392-3116a928-60ef-4df3-b0fa-5903a431729f.png" width="1124" title="" crop="0,0,1,1" id="UfoGP" class="ne-image">
+| Disk Meta Page | Extent Meta(Bitmap Page) | Extent Pages | Extent Meta(Bitmap Page) | Extent Pages | ... 
 
 Disk Meta Page是数据库文件中的第`0`个数据页，它维护了分区相关的信息，如分区的数量、每个分区中已经分配的页的数量等等。接下来，每一个分区都包含了一个位图页和一段连续的数据页。在这样的设计下，我们假设Disk Meta Page能够记录`4K/4=1K`个分区的信息，那么整个数据库能够维护的数据页的数量以及能够存储的数据数量与之前的设计相比，扩大了1000倍。与Disk Meta Page相关的代码定义在`src/include/page/disk_file_meta_page.h`中。
 

@@ -97,7 +97,7 @@ class DiskManager {
   std::fstream db_io_;
   std::string file_name_;
   // with multiple buffer pool instances, need to protect file access
-  std::recursive_mutex db_io_latch_;
+  std::recursive_mutex db_io_latch_; // Use recursive mutex to allow the same thread to acquire the lock multiple times without causing a deadlock.
   bool closed{false};
   char meta_data_[PAGE_SIZE];
 };
