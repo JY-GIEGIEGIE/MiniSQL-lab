@@ -12,7 +12,7 @@ public:
  // you may define your own constructor based on your member variables
  explicit TableIterator(TableHeap *table_heap, RowId rid, Txn *txn);
 
- explicit TableIterator(const TableIterator &other);
+ TableIterator(const TableIterator &other);
 
   virtual ~TableIterator();
 
@@ -31,7 +31,9 @@ public:
   TableIterator operator++(int);
 
 private:
-  // add your own private member variables here
+  TableHeap *table_heap_;   // 所属的堆表，用于 GetTuple / FetchPage
+  Row *row_;                // 当前指向的记录
+  Txn *txn_;                // 事务上下文（当前传 nullptr）
 };
 
 #endif  // MINISQL_TABLE_ITERATOR_H

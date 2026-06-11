@@ -41,7 +41,8 @@ uint32_t Row::SerializeTo(char *buf, Schema *schema) const {
 
 uint32_t Row::DeserializeFrom(char *buf, Schema *schema) {
   ASSERT(schema != nullptr, "Invalid schema before serialize.");
-  ASSERT(fields_.empty(), "Non empty field in row.");
+  // 清空已有字段，防止重复反序列化时残留旧数据
+  destroy();
 
   uint32_t column_count = *reinterpret_cast<uint32_t *>(buf);
   buf += sizeof(uint32_t);

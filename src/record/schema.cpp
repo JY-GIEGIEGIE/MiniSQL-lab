@@ -43,6 +43,6 @@ uint32_t Schema::DeserializeFrom(char *buf, Schema *&schema) {
       buf += size;
     }
     schema = new Schema(columns, true);
-    return sizeof(uint32_t) * 2 + schema->GetSerializedSize();
+    return schema->GetSerializedSize();
   }
 }
