@@ -6,3 +6,7 @@ datas/
 .idea/
 cmake-build-debug/
 cmake-build-release/
+build_asan/
+*.db
+tree_*.txt
+databases/

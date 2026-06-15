@@ -78,18 +78,9 @@ class BPlusTree {
 
   InternalPage *Split(InternalPage *node, Txn *transaction);
 
-  template <typename N>
-  bool CoalesceOrRedistribute(N *&node, Txn *transaction = nullptr);
-
-  bool Coalesce(InternalPage *&neighbor_node, InternalPage *&node, InternalPage *&parent, int index,
-                Txn *transaction = nullptr);
-
-  bool Coalesce(LeafPage *&neighbor_node, LeafPage *&node, InternalPage *&parent, int index,
-                Txn *transaction = nullptr);
-
-  void Redistribute(LeafPage *neighbor_node, LeafPage *node, int index);
-
-  void Redistribute(InternalPage *neighbor_node, InternalPage *node, int index);
+  // 处理叶子/内结点删除后的 underflow，返回 true 表示结点被 merge 已删除
+  bool HandleLeafUnderflow(LeafPage *node, Txn *transaction = nullptr);
+  bool HandleInternalUnderflow(InternalPage *node, Txn *transaction = nullptr);
 
   bool AdjustRoot(BPlusTreePage *node);
 

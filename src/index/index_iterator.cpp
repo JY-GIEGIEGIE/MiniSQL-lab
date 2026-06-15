@@ -7,7 +7,8 @@ IndexIterator::IndexIterator() = default;
 
 IndexIterator::IndexIterator(page_id_t page_id, BufferPoolManager *bpm, int index)
     : current_page_id(page_id), item_index(index), buffer_pool_manager(bpm) {
-  page = reinterpret_cast<LeafPage *>(buffer_pool_manager->FetchPage(current_page_id)->GetData());
+  if (current_page_id != INVALID_PAGE_ID)
+    page = reinterpret_cast<LeafPage *>(buffer_pool_manager->FetchPage(current_page_id)->GetData());
 }
 
 IndexIterator::~IndexIterator() {
@@ -15,18 +16,28 @@ IndexIterator::~IndexIterator() {
     buffer_pool_manager->UnpinPage(current_page_id, false);
 }
 
-/**
- * TODO: Student Implement
- */
 std::pair<GenericKey *, RowId> IndexIterator::operator*() {
-  ASSERT(false, "Not implemented yet.");
+  return page->GetItem(item_index);
 }
 
-/**
- * TODO: Student Implement
- */
 IndexIterator &IndexIterator::operator++() {
-  ASSERT(false, "Not implemented yet.");
+  item_index++;
+  if (item_index >= page->GetSize()) {
+    // 当前页遍历完毕，去下一页
+    page_id_t next_id = page->GetNextPageId();
+    buffer_pool_manager->UnpinPage(current_page_id, false);
+    if (next_id == INVALID_PAGE_ID) {
+      // 没有下一页了，变为 End
+      current_page_id = INVALID_PAGE_ID;
+      page = nullptr;
+      item_index = 0;
+    } else {
+      current_page_id = next_id;
+      page = reinterpret_cast<LeafPage *>(buffer_pool_manager->FetchPage(current_page_id)->GetData());
+      item_index = 0;
+    }
+  }
+  return *this;
 }
 
 bool IndexIterator::operator==(const IndexIterator &itr) const {
