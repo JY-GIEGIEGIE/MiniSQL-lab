@@ -13,6 +13,11 @@ BPlusTree::BPlusTree(index_id_t index_id, BufferPoolManager *buffer_pool_manager
     leaf_max_size_ = (PAGE_SIZE - LEAF_PAGE_HEADER_SIZE) / (processor_.GetKeySize() + sizeof(RowId)) - 1;
   if (internal_max_size == UNDEFINED_SIZE)
     internal_max_size_ = (PAGE_SIZE - INTERNAL_PAGE_HEADER_SIZE) / (processor_.GetKeySize() + sizeof(page_id_t)) - 1;
+  // 从 IndexRootsPage 加载已有的根页号（若索引已存在）
+  auto *page = buffer_pool_manager_->FetchPage(INDEX_ROOTS_PAGE_ID);
+  IndexRootsPage *roots = reinterpret_cast<IndexRootsPage *>(page->GetData());
+  roots->GetRootId(index_id_, &root_page_id_);
+  buffer_pool_manager_->UnpinPage(INDEX_ROOTS_PAGE_ID, false);
 }
 
 void BPlusTree::Destroy(page_id_t current_page_id) {
