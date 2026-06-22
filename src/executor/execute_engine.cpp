@@ -235,44 +235,37 @@ dberr_t ExecuteEngine::ExecuteShowTables(pSyntaxNode ast, ExecuteContext *contex
 
 dberr_t ExecuteEngine::ExecuteCreateTable(pSyntaxNode ast, ExecuteContext *context) {
   if (current_db_.empty()) return DB_FAILED;
-  // AST: child_=table_name(kNodeIdentifier), child_->next_=kNodeColumnDefinitionList
-  string table_name = ast->child_->val_;
+  string table_name(ast->child_->val_ ? ast->child_->val_ : "");
   auto *col_list = ast->child_->next_;
   vector<Column *> columns;
   vector<string> primary_keys;
   int col_idx = 0;
   for (auto *col_def = col_list->child_; col_def != nullptr; col_def = col_def->next_) {
     if (col_def->type_ == kNodeColumnDefinition) {
-      // child_=column name, child_->next_=type, child_->next_->next_=maybe length or unique
-      string col_name = col_def->child_->val_;
-      string col_type = col_def->child_->next_->val_;
+      string col_name(col_def->child_->val_ ? col_def->child_->val_ : "");
+      string col_type(col_def->child_->next_->val_ ? col_def->child_->next_->val_ : "");
+      // unique: either val_=="unique" or a child with val_="unique"
+      bool unique = (col_def->val_ && string(col_def->val_) == "unique");
+      for (auto *a = col_def->child_->next_->next_; a != nullptr && !unique; a = a->next_) {
+        if (a->val_ && string(a->val_) == "unique") unique = true;
+      }
       TypeId type_id;
       uint32_t len = 0;
-      if (col_type == "int") {
-        type_id = kTypeInt;
-      } else if (col_type == "float") {
-        type_id = kTypeFloat;
-      } else if (col_type == "char") {
+      if (col_type == "int") type_id = kTypeInt;
+      else if (col_type == "float") type_id = kTypeFloat;
+      else if (col_type == "char") {
         type_id = kTypeChar;
-        len = stoi(col_def->child_->next_->next_->val_);
-      } else {
-        return DB_FAILED;
-      }
-      bool nullable = true, unique = false;
-      // Check for UNIQUE: a trailing kNodeColumnDefinition with val_="unique"
-      for (auto *attr = col_def->child_->next_->next_->next_; attr != nullptr; attr = attr->next_) {
-        if (attr->type_ == kNodeColumnDefinition && string(attr->val_) == "unique")
-          unique = true;
-      }
-      columns.push_back(new Column(col_name, type_id, len, col_idx++, nullable, unique));
+        auto *len_node = col_def->child_->next_->next_;
+        len = (len_node && len_node->val_) ? stoi(len_node->val_) : 16;
+      } else return DB_FAILED;
+      if (type_id == kTypeChar)
+        columns.push_back(new Column(col_name, type_id, len, col_idx++, true, unique));
+      else
+        columns.push_back(new Column(col_name, type_id, col_idx++, true, unique));
     }
-  }
-  // Primary key columns are listed after column definitions
-  for (auto *pk = col_list->child_; pk != nullptr; pk = pk->next_) {
-    if (pk->type_ == kNodeColumnList) {
-      for (auto *pk_col = pk->child_; pk_col != nullptr; pk_col = pk_col->next_) {
-        primary_keys.push_back(pk_col->val_);
-      }
+    if (col_def->type_ == kNodeColumnList) {
+      for (auto *pk_col = col_def->child_; pk_col != nullptr; pk_col = pk_col->next_)
+        if (pk_col->val_) primary_keys.push_back(pk_col->val_);
     }
   }
   auto *schema = new Schema(columns);
@@ -280,7 +273,6 @@ dberr_t ExecuteEngine::ExecuteCreateTable(pSyntaxNode ast, ExecuteContext *conte
   Txn txn;
   auto result = dbs_[current_db_]->catalog_mgr_->CreateTable(table_name, schema, &txn, table_info);
   if (result != DB_SUCCESS) return result;
-  // Create index on primary key and unique columns
   for (auto &col : columns) {
     if (col->IsUnique()) {
       IndexInfo *idx_info = nullptr;
