@@ -789,7 +789,64 @@ Lock Manager 是 MiniSQL 的并发控制组件，管理事务对数据记录（R
 | #7 Lock Manager (Bonus) | 10 | 0 |
 | **总计** | **29** | **47** |
 
-全部 76 个测试用例通过。
+全部 76 个测试用例通过。各测试套件内容说明如下：
+
+### 实验 #1：Disk & Buffer Pool Manager
+
+**课程组测试**：
+- `disk_manager_test` (2 用例)：BitmapPage 全页分配/释放/回收，DiskManager 跨两个 Extent 分配、MetaPage 计数的正确性
+- `lru_replacer_test` (1 用例)：LRUReplacer 的 Pin/Unpin/Victim 基本顺序和重复 Unpin 处理
+- `buffer_pool_manager_test` (1 用例)：NewPage/FetchPage/UnpinPage/FlushPage 端到端二进制数据一致性
+
+**自编测试**：
+- `disk_manager_student_test` (8 用例，含 BitmapPage 5 + DiskManager 3)：BitmapPage PAGE_SIZE=4096 真实分配、越界拒绝（分配/释放/查询）、重复释放防御、释放后回收复用；DiskManager 的 IsPageFree 语义、页号回收、跨 Extent 分配连续正确性
+- `lru_replacer_student_test` (7 用例)：Victim 空队列、Pin 不存在元素、重复 Unpin、Pin/Unpin/Victim 交替、frame_id=0 边界、Size 一致性
+- `buffer_pool_manager_student_test` (10 用例)：DeletePage 完整流程与防误删、槽位回收、满池错误路径、UnpinPage/FlushPage 非法输入拒绝、脏页淘汰后数据完整性、CheckAllUnpinned
+
+### 实验 #2：Record Manager
+
+**课程组测试**：
+- `tuple_test` (2 用例)：各类型 Field 序列化 roundtrip + null 比较、Row 通过 TablePage Insert→Get→MarkDelete→ApplyDelete 的端到端生命周期
+- `table_heap_test` (1 用例)：10000 行插入 + 逐行按 RowId 回读 + 逐字段值比较验证一致性
+
+**自编测试**：
+- `tuple_student_test` (9 用例，含 Column 4 + Schema 1 + Row 4)：int/char/float 三种类型 Column 独立序列化 roundtrip、MAGIC_NUM 校验失败、三列 Schema 完整 roundtrip、全 null 行、混合 null 与非 null、空字符串 char、SerializeTo 与 GetSerializedSize 一致性
+- `table_heap_student_test` (10 用例)：MarkDelete→RollbackDelete 回滚、MarkDelete→ApplyDelete 物理删除后不可读、UpdateTuple 原地更新、UpdateTuple 删旧插新且 RowId 变化、迭代器跨页遍历、空表 Begin==End、迭代器跳过已删除行、超长记录拒绝（两 char(2047) 超出 SIZE_MAX_ROW）、非法 page_id 的 GetTuple/UpdateTuple、后缀递增 iter++
+
+### 实验 #3：Index Manager
+
+**课程组测试**：
+- `b_plus_tree_test` (1 用例)：2000 键随机 shuffle 插入→点查全部→shuffle 删除 1000→验证已删不存在、未删仍存在。100 次独立运行全部通过
+- `b_plus_tree_index_test` (2 用例)：BPlusTreeIndex 封装层的 InsertEntry/ScanKey/Destroy
+- `index_iterator_test` (1 用例)：IndexIterator 沿叶子链表的遍历和键值对访问
+
+**自编测试**：
+- `b_plus_tree_student_test` (3 用例)：完全模拟课测流程 20 trials（shuffle 插入 2000→shuffle 删除 1000→验证）、空树 Begin==End 与 Remove 不崩溃、500 键顺序插入后全部删除验证树正确变空
+
+### 实验 #4：Catalog Manager
+
+**课程组测试**：
+- `catalog_test` (3 用例)：CatalogMeta 序列化/反序列化 roundtrip（16 表+24 索引）、CreateTable→GetTable→持久化重启→GetTable 验证、CreateTable→CreateIndex→InsertEntry→ScanKey→持久化重启→GetIndex→ScanKey 验证
+
+**自编测试**：
+- `catalog_student_test` (3 用例)：表/索引不存在/列名无效/重复创建的错误返回码、DropTable 级联删除所有索引后 GetIndex 返回 DB_TABLE_NOT_EXIST、GetTables 返回全部表 + GetTableIndexes 按表筛选正确数量
+
+### 实验 #5：Planner & Executor
+
+**课程组测试**：
+- `executor_test` (4 用例)：通过手动构造 PlanNode 测试 SeqScanExecutor（谓词过滤+列投影）、IndexScanExecutor（索引扫描+RowId 交并集）、InsertExecutor（唯一检查+多索引更新）、DeleteExecutor（索引同步删除+MarkDelete）
+
+### 实验 #6：Recovery Manager
+
+**课程组测试**：
+- `recovery_manager_test` (1 用例)：3 事务×11 条日志×checkpoint 前后操作×RedoPhase+UndoPhase 完整恢复流程（T0 Abort 回滚、T1 Commit 保持、T2 活跃回滚）
+
+### 实验 #7：Lock Manager (Bonus)
+
+**课程组测试**：
+- `lock_manager_test` (10 用例)：READ_UNCOMMITTED 拒绝共享锁、两阶段锁 Growing→Shrinking 转换及 Shrinking 阶段拒绝新锁/升级、两个事务同时升级的冲突拒绝、正常共享升级排他、升级等待中事务被 Abort 的正确处理、简单和复杂死锁图的 DFS 检测正确性、2 事务和 4 事务的后台死锁检测端到端测试
+
+## 5.2 重点测试场景
 
 ## 5.2 重点测试说明
 
