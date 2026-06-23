@@ -343,7 +343,22 @@ dberr_t ExecuteEngine::ExecuteCreateIndex(pSyntaxNode ast, ExecuteContext *conte
   }
   IndexInfo *index_info = nullptr;
   Txn txn;
-  return dbs_[current_db_]->catalog_mgr_->CreateIndex(table_name, index_name, index_keys, &txn, index_info, "bptree");
+  auto result = dbs_[current_db_]->catalog_mgr_->CreateIndex(table_name, index_name, index_keys, &txn, index_info, "bptree");
+  if (result != DB_SUCCESS) return result;
+  // 将表中已有数据批量插入新建的索引
+  TableInfo *ti = nullptr;
+  if (dbs_[current_db_]->catalog_mgr_->GetTable(table_name, ti) == DB_SUCCESS) {
+    auto *heap = ti->GetTableHeap();
+    auto *schema = ti->GetSchema();
+    auto *key_schema = index_info->GetIndexKeySchema();
+    for (auto it = heap->Begin(nullptr); it != heap->End(); ++it) {
+      Row key_row;
+      Row tmp = *it;
+      tmp.GetKeyFromRow(schema, key_schema, key_row);
+      index_info->GetIndex()->InsertEntry(key_row, tmp.GetRowId(), nullptr);
+    }
+  }
+  return DB_SUCCESS;
 }
 
 dberr_t ExecuteEngine::ExecuteDropIndex(pSyntaxNode ast, ExecuteContext *context) {

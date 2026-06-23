@@ -31,16 +31,17 @@ use db0;
 ```
 create table account(
   id int,
-  name char(16) unique,
+  name char(16),
   balance float,
   primary key(id)
 );
+-- 注意：name 列暂不加 unique 约束，后面单独演示唯一约束和索引创建
 show tables;
 ```
 
 **预期**：`show tables` 显示 `account` 表。
 
-> 话术：框架会自动为 primary key 和 unique 列创建 B+ 树索引。
+> 框架为 primary key 自动创建 B+ 树索引。name 列未设 unique，后面演示手动建索引。
 
 ---
 
@@ -76,7 +77,7 @@ select * from account where id = 15000;
 select * from account where name = "name05678";
 ```
 
-记录 `name = "name05678"` 的执行时间 **t₁**。name 列在建表时已自动创建唯一索引，所以这是走索引的点查，非常快。
+记录 `name = "name05678"` 的执行时间 **t₁**。此时 name 列**没有索引**，是全表扫描，较慢。
 
 **不等值查询**：
 
@@ -101,48 +102,76 @@ select * from account where id < 20000 and name > "name10000";
 
 ## 第六阶段：唯一约束
 
+**主键冲突**：
+
 ```
 insert into account values(0, "dup_test", 100.0);
 ```
 
 **预期**：`PRIMARY KEY` 冲突（id=0 已存在）。
 
+**演示 UNIQUE 约束（单独建表）**：
+
 ```
-insert into account values(99999, "name00001", 200.0);
+create table t_uniq(id int unique, val int);
+insert into t_uniq values(1, 100);
+insert into t_uniq values(1, 200);
 ```
 
-**预期**：`UNIQUE` 约束冲突（name00001 已被 id=1 占用）。
+**预期**：第二次插入报 `UNIQUE` 约束冲突（id=1 已存在）。
+
+```
+drop table t_uniq;
+```
 
 ---
 
 ## 第七阶段：索引效果对比（核心）
 
-name 列已有自动建的 unique 索引。我们在 **balance 列**上新建一个索引，对比前后查询速度。
+此时只有 id 列有主键索引（`pk_account`），name 列**无索引**。我们在 name 上建索引，对比前后查询速度。
 
-**查 balance 范围（无索引，全表扫描）**：
-
-```
-select * from account where balance > 90000 and balance < 91000;
-```
-
-记录时间 **t_before**。（30k 条全表扫描，较慢。）
-
-**创建索引**：
+**查 name 点查（无索引，全表扫描）**：
 
 ```
-create index idx01 on account(balance);
+select * from account where name = "name05678";
+```
+
+记录时间 **t₁**。（3 万条全表扫描。）
+
+**在 name 上创建索引**：
+
+```
+create index idx01 on account(name);
 show indexes;
 ```
 
-**再次查询同条件**：
+现在 `show indexes` 显示两个索引：`pk_account`（主键）和 `idx01`（name 列手动建的）。
+
+**再次查 name 点查（走索引）**：
 
 ```
-select * from account where balance > 90000 and balance < 91000;
+select * from account where name = "name05678";
 ```
 
-记录时间 **t_after**。**预期 t_after < t_before**——走索引比全表扫描快。
+记录时间 **t₂**。**预期 t₂ < t₁**——走索引比全表扫描快得多。
 
-**删除和回插**：
+**查 name 范围（走索引）**：
+
+```
+select * from account where name > "name14500" and name < "name14600";
+```
+
+记录时间 **t₃**。同样是走索引。
+
+**多条件查（id 索引 + name 索引，很快）**：
+
+```
+select * from account where id < 20000 and name < "name10000";
+```
+
+记录时间 **t₄**。id 和 name 都有索引。
+
+**删除和回插（验证索引维护）**：
 
 ```
 delete from account where name = "name02345";
@@ -155,10 +184,10 @@ select * from account where name = "name02345";
 
 ```
 drop index idx01;
-select * from account where balance > 90000 and balance < 91000;
+select * from account where name = "name05678";
 ```
 
-记录时间 **t_drop**。**预期 t_drop > t_after**——索引被删，退回全表扫描。
+记录时间 **t₅**。**预期 t₅ > t₂**——索引被删，退回全表扫描。
 
 ---
 
@@ -227,12 +256,5 @@ account 应消失。
 
 1. **每条 SQL 必须以分号结尾**
 2. **execfile 前确保已 use db0**
-3. **索引演示用 balance 列**（name 已有 unique 索引，再次建会报 INDEX_ALREADY_EXIST）
-4. **name 对应的 id 对照**（3 万条）：
-   - name00000 → id=0
-   - name00001 → id=1
-   - name02345 → id=2345
-   - name05678 → id=5678
-   - name10000 → id=10000
-   - name14500 → id=14500
-5. **展示失败场景**：插入重复主键、违反 unique 约束——都会打印明确的错误信息
+3. **索引演示用 name 列**（建表时 name 不带 unique，`create index idx01 on account(name)` 手动建索引）
+4. **展示失败场景**：插入重复主键、违反 unique 约束——都会打印明确的错误信息
