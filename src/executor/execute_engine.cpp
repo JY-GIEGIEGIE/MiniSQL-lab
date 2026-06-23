@@ -363,8 +363,22 @@ dberr_t ExecuteEngine::ExecuteCreateIndex(pSyntaxNode ast, ExecuteContext *conte
 
 dberr_t ExecuteEngine::ExecuteDropIndex(pSyntaxNode ast, ExecuteContext *context) {
   if (current_db_.empty()) return DB_FAILED;
-  string table_name = ast->child_->val_;
-  string index_name = ast->child_->next_->val_;
+  // drop index idx01 — AST 只有 index_name，没有 table_name
+  // drop index idx01 on t1 — AST: index_name, table_name
+  string index_name = ast->child_->val_ ? ast->child_->val_ : "";
+  string table_name = ast->child_->next_ ? ast->child_->next_->val_ : "";
+  if (table_name.empty()) {
+    // 未指定表名，遍历所有表查找该索引
+    vector<TableInfo *> tables;
+    dbs_[current_db_]->catalog_mgr_->GetTables(tables);
+    for (auto *t : tables) {
+      IndexInfo *idx = nullptr;
+      if (dbs_[current_db_]->catalog_mgr_->GetIndex(t->GetTableName(), index_name, idx) == DB_SUCCESS) {
+        return dbs_[current_db_]->catalog_mgr_->DropIndex(t->GetTableName(), index_name);
+      }
+    }
+    return DB_INDEX_NOT_FOUND;
+  }
   return dbs_[current_db_]->catalog_mgr_->DropIndex(table_name, index_name);
 }
 
