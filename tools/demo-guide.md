@@ -4,11 +4,12 @@
 
 ```bash
 cd /home/jy/minisql/build
+rm -rf databases        # 清理之前残留的数据库文件，防止崩溃
 cp ../tools/sql_30k.txt .
 ./bin/main
 ```
 
-打开一个终端窗口，启动 main 后逐一输入以下命令。**每条 SQL 末尾必须有分号。**
+**关键**：`rm -rf databases` 必须在每次启动前执行。旧数据库文件残留会导致段错误。打开终端后逐一输入以下命令。**每条 SQL 末尾必须有分号。**
 
 ---
 
