@@ -297,7 +297,23 @@ dberr_t ExecuteEngine::ExecuteDropTable(pSyntaxNode ast, ExecuteContext *context
 
 dberr_t ExecuteEngine::ExecuteShowIndexes(pSyntaxNode ast, ExecuteContext *context) {
   if (current_db_.empty()) return DB_FAILED;
-  string table_name = ast->child_->val_;
+  // show indexes 可能不带表名（ast->child_ 为 null），此时列出所有表的所有索引
+  if (ast->child_ == nullptr || ast->child_->val_ == nullptr) {
+    vector<TableInfo *> tables;
+    dbs_[current_db_]->catalog_mgr_->GetTables(tables);
+    cout << "+----------+------------+" << endl;
+    cout << "| Table    | Index      |" << endl;
+    cout << "+----------+------------+" << endl;
+    for (auto *t : tables) {
+      vector<IndexInfo *> idxs;
+      dbs_[current_db_]->catalog_mgr_->GetTableIndexes(t->GetTableName(), idxs);
+      for (auto *idx : idxs)
+        printf("| %-8s | %-10s |\n", t->GetTableName().c_str(), idx->GetIndexName().c_str());
+    }
+    cout << "+----------+------------+" << endl;
+    return DB_SUCCESS;
+  }
+  string table_name(ast->child_->val_);
   vector<IndexInfo *> indexes;
   auto result = dbs_[current_db_]->catalog_mgr_->GetTableIndexes(table_name, indexes);
   if (result != DB_SUCCESS) return result;
@@ -317,9 +333,9 @@ dberr_t ExecuteEngine::ExecuteShowIndexes(pSyntaxNode ast, ExecuteContext *conte
 
 dberr_t ExecuteEngine::ExecuteCreateIndex(pSyntaxNode ast, ExecuteContext *context) {
   if (current_db_.empty()) return DB_FAILED;
-  // AST: child_=table name, child_->next_=index name, child_->next_->next_=kNodeColumnList
-  string table_name = ast->child_->val_;
-  string index_name = ast->child_->next_->val_;
+  // AST: child_=index_name(kNodeIdentifier), child_->next_=table_name, child_->next_->next_=kNodeColumnList
+  string index_name = ast->child_->val_ ? ast->child_->val_ : "";
+  string table_name = ast->child_->next_->val_ ? ast->child_->next_->val_ : "";
   auto *col_list = ast->child_->next_->next_;
   vector<string> index_keys;
   for (auto *c = col_list->child_; c != nullptr; c = c->next_) {
