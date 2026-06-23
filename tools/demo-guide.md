@@ -46,9 +46,13 @@ show tables;
 
 ---
 
-## 第三阶段：批量插入 3 万条
+## 第三阶段：创建 name 索引后批量插入
+
+先建索引再插数据——索引随插入自动填充。
 
 ```
+create index idx01 on account(name);
+show indexes;
 execfile "sql_30k.txt";
 ```
 
@@ -78,7 +82,7 @@ select * from account where id = 15000;
 select * from account where name = "name05678";
 ```
 
-记录 `name = "name05678"` 的执行时间 **t₁**。此时 name 列**没有索引**，是全表扫描，较慢。
+记录 `name = "name05678"` 的执行时间 **t₁**。name 列已有索引 `idx01`，走索引很快。
 
 **不等值查询**：
 
@@ -127,50 +131,37 @@ drop table t_uniq;
 
 ---
 
-## 第七阶段：索引效果对比（核心）
+## 第七阶段：索引效果验证与删除
 
-此时只有 id 列有主键索引（`pk_account`），name 列**无索引**。我们在 name 上建索引，对比前后查询速度。
+idx01 在插入数据前已创建，30k 条数据插入时索引同步填充。演示索引的有效性。
 
-**查 name 点查（无索引，全表扫描）**：
-
-```
-select * from account where name = "name05678";
-```
-
-记录时间 **t₁**。（3 万条全表扫描。）
-
-**在 name 上创建索引**：
+**查看当前索引**：
 
 ```
-create index idx01 on account(name);
 show indexes;
 ```
 
-现在 `show indexes` 显示两个索引：`pk_account`（主键）和 `idx01`（name 列手动建的）。
+显示 `pk_account`（主键）和 `idx01`（name 列）。
 
-**再次查 name 点查（走索引）**：
+**name 点查（走索引，快）**：
 
 ```
 select * from account where name = "name05678";
 ```
 
-记录时间 **t₂**。**预期 t₂ < t₁**——走索引比全表扫描快得多。
+记录时间 **t₁**。
 
-**查 name 范围（走索引）**：
+**name 范围查（走索引）**：
 
 ```
 select * from account where name > "name14500" and name < "name14600";
 ```
 
-记录时间 **t₃**。同样是走索引。
-
-**多条件查（id 索引 + name 索引，很快）**：
+**多条件查（id 索引 + name 索引）**：
 
 ```
 select * from account where id < 20000 and name < "name10000";
 ```
-
-记录时间 **t₄**。id 和 name 都有索引。
 
 **删除和回插（验证索引维护）**：
 
@@ -181,14 +172,14 @@ insert into account values(99998, "name02345", 500.0);
 select * from account where name = "name02345";
 ```
 
-**删除索引后对比**：
+**删除索引后对比——退回全表扫描**：
 
 ```
 drop index idx01;
 select * from account where name = "name05678";
 ```
 
-记录时间 **t₅**。**预期 t₅ > t₂**——索引被删，退回全表扫描。
+记录时间 **t₂**。**预期 t₂ > t₁**——删索引后退回全表扫描，明显变慢。
 
 ---
 
