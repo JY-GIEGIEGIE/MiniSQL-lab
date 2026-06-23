@@ -4,7 +4,7 @@
 
 ```bash
 cd /home/jy/minisql/build
-cp ../tools/sql.txt .
+cp ../tools/sql_30k.txt .
 ./bin/main
 ```
 
@@ -49,14 +49,14 @@ show tables;
 **方案一（推荐）—— execfile 批量执行**：
 
 ```
-execfile "sql.txt";
+execfile "sql_30k.txt";
 ```
 
 我们已经用 Python 生成了 100000 条 `insert into account values(...)`，每条约 50 字节，文件约 5MB。ExecuteEngine 的 ExecuteExecfile 逐行读 SQL 调用 Parser+Executor。控制台会输出每次 SQL 执行的耗时信息。**注意观察最终显示的总插入时间。**
 
 **方案二——每次 1 万条**：
 
-如果不能一次性跑完（内存/时间限制），分 10 次，每次用单独的文件（sql_1.txt ~ sql_10.txt，各含 10000 条）。
+如果不能一次性跑完，可以用更小的文件（如 10000 条），`python3 ../tools/gen_sql.py 10000 > sql_10k.txt` 生成。
 
 **插入结果验证**：
 
@@ -230,7 +230,7 @@ show tables;  -- account 应消失
 
 ## 注意事项
 
-1. **执行 sql.txt 前确认当前在 db0 且 use db0 已执行**
+1. **执行 sql_30k.txt 前确认当前在 db0 且 use db0 已执行**
 2. **如果 execfile 太慢**，可以说"为了节省时间已预先插入，这里演示部分操作"
 3. **索引对比时**，如果 name 的 unique 索引已存在，`create index idx01 on account(name)` 会报错。改为在 balance 上建索引做对比，或先说明 unique 索引已由建表时自动创建
 4. **展示"操作失败"的场景**：插入重复主键、在 Shrinking 表上插入、插入违反 unique 约束——这些都会打印明确的错误信息
