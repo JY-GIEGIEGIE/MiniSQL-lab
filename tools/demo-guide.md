@@ -8,11 +8,11 @@ cp ../tools/sql_30k.txt .
 ./bin/main
 ```
 
-打开一个终端窗口，启动 main 后逐一输入以下命令。
+打开一个终端窗口，启动 main 后逐一输入以下命令。**每条 SQL 末尾必须有分号。**
 
 ---
 
-## 第一阶段：基本操作（2 分钟）
+## 第一阶段：基本操作
 
 ```
 create database db0;
@@ -26,7 +26,7 @@ use db0;
 
 ---
 
-## 第二阶段：建表（1 分钟）
+## 第二阶段：建表
 
 ```
 create table account(
@@ -38,167 +38,165 @@ create table account(
 show tables;
 ```
 
-**预期**：`show tables` 显示 `Tables_in_db0` 下有一张 `account` 表。
+**预期**：`show tables` 显示 `account` 表。
 
-> 提示：验收时可以顺口解释——框架会自动为 primary key 和 unique 列创建 B+ 树索引，建表时就已经完成了。
+> 话术：框架会自动为 primary key 和 unique 列创建 B+ 树索引。
 
 ---
 
-## 第三阶段：批量插入 10 万条（核心，3-5 分钟）
-
-**方案一（推荐）—— execfile 批量执行**：
+## 第三阶段：批量插入 3 万条
 
 ```
 execfile "sql_30k.txt";
 ```
 
-我们已经用 Python 生成了 100000 条 `insert into account values(...)`，每条约 50 字节，文件约 5MB。ExecuteEngine 的 ExecuteExecfile 逐行读 SQL 调用 Parser+Executor。控制台会输出每次 SQL 执行的耗时信息。**注意观察最终显示的总插入时间。**
+3 万条 INSERT，预计 2-4 分钟。控制台逐条显示 `Query OK, 1 row affected`。
 
-**方案二——每次 1 万条**：
-
-如果不能一次性跑完，可以用更小的文件（如 10000 条），`python3 ../tools/gen_sql.py 10000 > sql_10k.txt` 生成。
-
-**插入结果验证**：
+**验证**：
 
 ```
-select * from account;
+select * from account where id = 29999;
 ```
 
-该命令会遍历全表，耗时较长。在输出末尾显示 `(100000 rows)` 即证明全部插入成功。
+应返回最后一条记录。再用：
 
-**提示**：如果全表扫描太慢（10 万条输出 10 万行），可以用 `select count(*) from account;` 替代……但 MiniSQL 不支持 count(*)。可以事先讲："全表扫描验证已在前面的自动化测试中验证过数据一致性，这里快速展示结果行数。"
+```
+select * from account where id = 0;
+```
+
+应返回第一条。两条都对即证明 30000 条全部插入成功。（全表扫描 `select * from account` 输出太多，不推荐。）
 
 ---
 
-## 第四阶段：点查询（2 分钟）
+## 第四阶段：点查询
 
 ```
 select * from account where id = 12500;
-select * from account where id = 50000;
-select * from account where balance = 12345.67;
-select * from account where name = "name56789";
+select * from account where id = 15000;
+select * from account where name = "name05678";
 ```
 
-**重点**：记录 `name = "name56789"` 的执行时间，记为 **t₁**。这是**无额外索引时的 name 列查询时间**（name 列有 unique 约束，已自动建了索引——实际上 name 唯一索引在建表时就存在了）。
-
-> 如果 name 上的 unique 索引确实已自动创建（我们的 ExecuteCreateTable 会为 unique 列建索引 `u_name`），那 t₁ 应该很快。验收时可以说："建表时已自动为 unique 列 name 建立了 B+ 树索引，所以 name 点查是走索引的，非常快。"
+记录 `name = "name05678"` 的执行时间 **t₁**。name 列在建表时已自动创建唯一索引，所以这是走索引的点查，非常快。
 
 **不等值查询**：
 
 ```
-select * from account where id <> 99999;
-select * from account where balance <> 0;
+select * from account where id <> 29999;
 select * from account where name <> "name00000";
 ```
 
 ---
 
-## 第五阶段：多条件与投影（2 分钟）
+## 第五阶段：多条件与投影
 
 ```
-select id, name from account where balance >= 10000 and balance < 20000;
-select name, balance from account where balance > 50000 and id <= 1000;
-select * from account where id < 12515000 and name > "name14500";
+select id, name from account where id >= 10000 and id < 10020;
+select name, balance from account where id <= 50 and balance > 50000;
+select * from account where id < 20000 and name > "name10000";
 ```
 
 记录最后一条的执行时间，记为 **t₅**。
 
 ---
 
-## 第六阶段：唯一约束（1 分钟）
+## 第六阶段：唯一约束
 
 ```
 insert into account values(0, "dup_test", 100.0);
 ```
 
-**预期**：提示 PRIMARY KEY 冲突（id=0 已存在）。
+**预期**：`PRIMARY KEY` 冲突（id=0 已存在）。
 
 ```
-insert into account values(999999, "name00001", 200.0);
+insert into account values(99999, "name00001", 200.0);
 ```
 
-**预期**：提示 UNIQUE 约束冲突（name00001 已被占）。
+**预期**：`UNIQUE` 约束冲突（name00001 已被 id=1 占用）。
 
 ---
 
-## 第七阶段：索引效果对比（核心，3 分钟）
+## 第七阶段：索引效果对比（核心）
 
-**创建额外索引**：
+name 列已有自动建的 unique 索引。我们在 **balance 列**上新建一个索引，对比前后查询速度。
+
+**查 balance 范围（无索引，全表扫描）**：
 
 ```
-create index idx01 on account(name);
+select * from account where balance > 90000 and balance < 91000;
+```
+
+记录时间 **t_before**。（30k 条全表扫描，较慢。）
+
+**创建索引**：
+
+```
+create index idx01 on account(balance);
 show indexes;
 ```
 
-查询同样的 name：
+**再次查询同条件**：
 
 ```
-select * from account where name = "name56789";
+select * from account where balance > 90000 and balance < 91000;
 ```
 
-记录时间 **t₂**。
+记录时间 **t_after**。**预期 t_after < t_before**——走索引比全表扫描快。
 
-**预期**：t₂ < t₁（如果有显式索引对比的话。实际上 name 的 unique 索引已存在，这里再次建 idx01 可能报 `INDEX_ALREADY_EXIST`。**如果报错，改为**：）
-
-```
-select * from account where name = "name45678";
-```
-
-记录时间 **t₃**。
-
-**多条件索引加速**：
+**删除和回插**：
 
 ```
-select * from account where id < 12500200 and name < "name00100";
+delete from account where name = "name02345";
+select * from account where name = "name02345";
+insert into account values(99998, "name02345", 500.0);
+select * from account where name = "name02345";
 ```
 
-记录时间 **t₆**。比较 t₅ 和 t₆。
-
-**删除验证**：
-
-```
-delete from account where name = "name45678";
-select * from account where name = "name45678";   -- 应返回空
-insert into account values(999999, "name45678", 500.0);  -- 应成功
-```
-
-**删除索引**：
+**删除索引后对比**：
 
 ```
 drop index idx01;
+select * from account where balance > 90000 and balance < 91000;
 ```
 
-重新执行之前有索引的查询，记录 **t₄**。要求 **t₃ < t₄**（索引删除后变慢）。
+记录时间 **t_drop**。**预期 t_drop > t_after**——索引被删，退回全表扫描。
 
 ---
 
-## 第八阶段：更新与删除（2 分钟）
+## 第八阶段：更新与删除
 
 ```
-update account set id = 999998, balance = 88888.88 where name = "name56789";
-select * from account where name = "name56789";  -- 验证 id 和 balance 已变
+update account set balance = 88888.88 where name = "name05678";
+select * from account where name = "name05678";
 ```
 
+验证 balance 已变为 88888.88。
+
 ```
-delete from account where balance = 88888.88;
-select * from account where name = "name56789";  -- 应返回空
+delete from account where name = "name05678";
+select * from account where name = "name05678";
 ```
+
+应返回空。
 
 ```
 delete from account;
-select * from account;  -- 应返回空
+select * from account where id = 0;
 ```
+
+应返回空——全表已清空。
 
 ```
 drop table account;
-show tables;  -- account 应消失
+show tables;
 ```
+
+account 应消失。
 
 ---
 
-## 第九阶段：介绍设计思路（自由发挥，3-5 分钟）
+## 第九阶段：设计思路介绍
 
-按架构图从下到上讲：
+按架构从下到上：
 1. Disk Manager → 多 Extent 位图管理，逻辑/物理页号映射
 2. Buffer Pool Manager → LRU 淘汰 + free_list 两级调度
 3. Record Manager → Slotted-page 堆表，Row/Field/Schema 序列化
@@ -206,10 +204,7 @@ show tables;  -- account 应消失
 5. Catalog Manager → 元数据持久化，每表/每索引独立数据页
 6. Planner & Executor → 火山模型算子
 
-**亮点可提**：
-- B+ 树合并方向的 CMU 参考修正（关键 bug fix）
-- max_size 的溢出保护设计
-- 自编测试覆盖 47 个边界用例
+**亮点**：B+ 树合并方向参考 CMU 修正（删除时的关键 bug fix），max_size 溢出保护，自编 47 个边界测试。
 
 ---
 
@@ -217,10 +212,10 @@ show tables;  -- account 应消失
 
 | 阶段 | 时长 |
 |------|------|
-| 基本操作 + 建表 | 3 min |
-| 批量插入（execfile 执行中） | 2-5 min |
+| 基本操作 + 建表 | 2 min |
+| 批量插入（execfile） | 2-4 min |
 | 点查 + 多条件 | 3 min |
-| 约束 + 索引 | 3 min |
+| 约束 + 索引对比 | 3 min |
 | 更新删除 | 2 min |
 | 设计介绍 | 3-5 min |
 | 提问 | 5 min |
@@ -230,7 +225,14 @@ show tables;  -- account 应消失
 
 ## 注意事项
 
-1. **执行 sql_30k.txt 前确认当前在 db0 且 use db0 已执行**
-2. **如果 execfile 太慢**，可以说"为了节省时间已预先插入，这里演示部分操作"
-3. **索引对比时**，如果 name 的 unique 索引已存在，`create index idx01 on account(name)` 会报错。改为在 balance 上建索引做对比，或先说明 unique 索引已由建表时自动创建
-4. **展示"操作失败"的场景**：插入重复主键、在 Shrinking 表上插入、插入违反 unique 约束——这些都会打印明确的错误信息
+1. **每条 SQL 必须以分号结尾**
+2. **execfile 前确保已 use db0**
+3. **索引演示用 balance 列**（name 已有 unique 索引，再次建会报 INDEX_ALREADY_EXIST）
+4. **name 对应的 id 对照**（3 万条）：
+   - name00000 → id=0
+   - name00001 → id=1
+   - name02345 → id=2345
+   - name05678 → id=5678
+   - name10000 → id=10000
+   - name14500 → id=14500
+5. **展示失败场景**：插入重复主键、违反 unique 约束——都会打印明确的错误信息
