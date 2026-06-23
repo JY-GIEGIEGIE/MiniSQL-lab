@@ -371,6 +371,7 @@ dberr_t ExecuteEngine::ExecuteExecfile(pSyntaxNode ast, ExecuteContext *context)
     }
     MinisqlParserFinish();
     yy_delete_buffer(bp);
+    yylex_destroy();
   }
   infile.close();
   return DB_SUCCESS;
